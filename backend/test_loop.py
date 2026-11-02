@@ -90,6 +90,18 @@ async def test_planner_usage_limit_pauses_and_keeps_pending():
     assert [m["role"] for m in main.pending_for_planner(r, t)] == ["executor"]
 
 
+async def test_new_workspace_gets_gitignore_in_initial_commit():
+    r, _ = new_run()
+    ws = db.get_run(r)["workspace"]
+    assert main.git(ws, "ls-files")[0] == ".gitignore"
+    assert "__pycache__/" in open(os.path.join(ws, ".gitignore")).read()
+    keep = os.path.join(tmp, "has_gitignore")
+    os.makedirs(keep)
+    open(os.path.join(keep, ".gitignore"), "w").write("mine\n")
+    main.create_run(main.NewRun(workspace=keep))
+    assert open(os.path.join(keep, ".gitignore")).read() == "mine\n"
+
+
 async def run_all():
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

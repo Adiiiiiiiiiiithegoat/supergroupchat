@@ -246,6 +246,10 @@ def create_run(body: NewRun):
     os.makedirs(ws, exist_ok=True)
     if git(ws, "rev-parse", "--is-inside-work-tree")[1] != 0:
         git(ws, "init")
+    gitignore = os.path.join(ws, ".gitignore")
+    if not os.path.exists(gitignore):  # auto-commit uses add -A; keep caches and secrets out of history
+        with open(gitignore, "w", encoding="utf-8") as f:
+            f.write("__pycache__/\n*.pyc\nnode_modules/\n.env\n.venv/\ndist/\nbuild/\n")
     if git(ws, "rev-parse", "HEAD")[1] != 0:  # HEAD~1 diffs need a base commit
         git(ws, "add", "-A")
         out, code = git(ws, "commit", "--allow-empty", "-m", "sgc: initial")
