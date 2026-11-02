@@ -22,3 +22,10 @@
 
 ## Follow-ups
 - [ ] Click-test branch panel + live streaming in a real browser (Chrome extension was down during smoke test)
+
+## Review fixes
+- [x] Planner errors posted as system so the executor report stays pending (+ test)
+- [x] Pause on usage/rate limit; limited executor round not counted or committed
+- [x] Default .gitignore for new workspaces
+- [x] Keep user ~/.claude/CLAUDE.md out of agent sessions (claudeMdExcludes)
+- [x] Reset 'running' runs to 'paused' on startup

@@ -22,7 +22,7 @@ INDEX = os.path.join(ROOT, "frontend", "index.html")
 
 app = FastAPI()
 sockets: set[WebSocket] = set()
-# ponytail: in-memory per-run state; runs left 'running' by a server restart just need Resume
+# ponytail: in-memory per-run state; reset_stale_runs() pauses leftover 'running' runs at startup
 want_loop: dict[int, bool] = {}
 drivers: dict[int, asyncio.Task] = {}
 procs: dict[int, set] = {}
@@ -378,6 +378,12 @@ async def ws_endpoint(ws: WebSocket):
         sockets.discard(ws)
 
 
+def reset_stale_runs():
+    # Drivers and processes don't survive a restart, so 'running' would be a lie; Resume picks up from the db.
+    db.conn.execute("UPDATE runs SET status='paused' WHERE status='running'")
+
+
 if __name__ == "__main__":
+    reset_stale_runs()
     # No reload: reload mode can swap in the selector loop, which can't spawn subprocesses on Windows.
     uvicorn.run(app, host="127.0.0.1", port=PORT)

@@ -102,6 +102,15 @@ async def test_new_workspace_gets_gitignore_in_initial_commit():
     assert open(os.path.join(keep, ".gitignore")).read() == "mine\n"
 
 
+async def test_startup_pauses_running_runs():
+    a, _ = new_run()
+    b, _ = new_run()
+    db.update_run(a, status="running")
+    db.update_run(b, status="done")
+    main.reset_stale_runs()
+    assert (db.get_run(a)["status"], db.get_run(b)["status"]) == ("paused", "done")
+
+
 async def run_all():
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
