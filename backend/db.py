@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS messages(
   id INTEGER PRIMARY KEY, run_id INTEGER NOT NULL REFERENCES runs(id), thread_id INTEGER NOT NULL REFERENCES threads(id),
   role TEXT NOT NULL CHECK(role IN ('aditya','planner','executor','system')),
   content TEXT NOT NULL, meta_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, expires_at REAL NOT NULL);  -- id = sha256(session id)
 """
 
 # ponytail: one shared connection, only touched from the event loop thread

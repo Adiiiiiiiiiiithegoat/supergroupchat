@@ -7,16 +7,14 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 import uvicorn
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from . import db
+from . import auth, db
 from .agents import check_claude_md_exclusion, kill_tree, parse_status, run_turn, strip_status
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-load_dotenv(os.path.join(ROOT, ".env"))
 PORT = int(os.getenv("PORT", "8787"))
 MAX_ROUNDS = int(os.getenv("MAX_ROUNDS", "15"))
 DEFAULT_WORKSPACE = os.getenv("DEFAULT_WORKSPACE", "")
@@ -57,6 +55,8 @@ async def lifespan(app):
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(auth.Guard)
+app.include_router(auth.router)
 sockets: set[WebSocket] = set()
 # ponytail: in-memory per-run state; reset_stale_runs() pauses leftover 'running' runs at startup
 want_loop: dict[int, bool] = {}

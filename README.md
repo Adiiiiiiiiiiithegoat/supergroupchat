@@ -7,8 +7,39 @@ Setup:
     .venv\Scripts\activate
     pip install -r requirements.txt
     copy .env.example .env
+    python -m backend.auth_setup
     run.bat
-Then open http://localhost:8787 (binds 127.0.0.1 only; there is no auth).
+Then open http://localhost:8787 (binds 127.0.0.1 only) and log in.
+
+## Login
+
+Single user: password (argon2 hash) + TOTP code. `python -m backend.auth_setup` asks for a password, shows a QR code
+for your authenticator app, checks one code, and writes `PASSWORD_HASH`, `TOTP_SECRET`, `SESSION_SECRET` into `.env`.
+Re-running it replaces them and logs out every session. Run it in a normal terminal (it asks for input).
+
+- Every route and the websocket need a session, except `GET/POST /login`. Sessions last 7 days and are stored hashed in
+  the `sessions` table: **Log out** deletes yours; `DELETE FROM sessions` in `data/sgc.db` kills all of them.
+- POSTs and the websocket must have `Origin` = `https://groupchat.solutionhaven.net` or `http://localhost:<PORT>` /
+  `http://127.0.0.1:<PORT>`.
+- 5 failed logins from one IP (`CF-Connecting-IP`, so the real client behind the tunnel) in 15 minutes lock that IP out
+  for 15 minutes. Every failed attempt is printed and appended to `data/auth.log`.
+- `ALLOW_LOCAL=1` skips login for loopback requests without `CF-Connecting-IP`. cloudflared also connects from
+  127.0.0.1, but Cloudflare always adds that header, so tunnel traffic still needs a login.
+- Lockouts and the "TOTP code already used" marker are in memory; a restart clears them.
+- Tests: `python -m backend.test_auth`
+
+## Remote access (Cloudflare Tunnel)
+
+`start-all.bat` starts the server and `cloudflared tunnel run --token %TUNNEL_TOKEN%` (token from `.env`). The tunnel
+"supergroupchat" is remotely managed: its ingress (groupchat.solutionhaven.net → http://localhost:8787, else 404)
+lives in Cloudflare, not in a local config file.
+
+Always-on instead (from an admin terminal; not installed by default):
+
+    cloudflared service install <TUNNEL_TOKEN>
+
+That runs only the tunnel as a Windows service; the server itself still needs `run.bat` (or a scheduled task).
+`cloudflared service uninstall` removes it.
 
 Use: type a workspace folder, **New run**, chat with the Planner, **Start loop**. Click any message to open a side thread.
 "Close & send note" sends whatever is in the side-thread box as a one-line note into the main thread.

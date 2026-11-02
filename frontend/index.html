@@ -87,6 +87,7 @@ header .grow { flex: 1 1 280px; }
     <button id="pause">Pause</button>
     <button id="resume">Resume</button>
     <button id="stop">Stop</button>
+    <form method="post" action="/logout" style="display:inline"><button>Log out</button></form>
   </div>
 </header>
 <div id="warning" role="alert" hidden></div>
@@ -122,6 +123,7 @@ const live = {};  // thread_id -> live bubble element
 
 async function api(path, body) {
   const r = await fetch(path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  if (r.status === 401) location.href = '/login';  // session expired or revoked
   const data = await r.json().catch(() => ({}));
   if (!r.ok) { $('error').textContent = data.detail || r.statusText; throw new Error(data.detail); }
   $('error').textContent = '';

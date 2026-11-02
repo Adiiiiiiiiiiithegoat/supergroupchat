@@ -5,3 +5,4 @@ __pycache__/
 data/*.db
 data/*.db-*
 data/agent-settings.json
+data/auth.log
