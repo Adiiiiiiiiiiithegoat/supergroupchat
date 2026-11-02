@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>supergroupchat</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #fff; --text: #1d2129; --muted: #6b7280; --border: #dde1e7;
+  --aditya: #2563eb; --planner: #7c3aed; --executor: #059669; --system: #6b7280;
+  --aditya-bg: #eff4ff; --planner-bg: #f5f0ff; --executor-bg: #ecfdf5; --system-bg: transparent;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111318; --panel: #1a1d24; --text: #e6e8ec; --muted: #9aa1ad; --border: #2c313b;
+    --aditya: #7aa2ff; --planner: #b794ff; --executor: #4fd1a5; --system: #9aa1ad;
+    --aditya-bg: #1a2338; --planner-bg: #231c36; --executor-bg: #13291f;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, sans-serif; display: flex; flex-direction: column; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+button:disabled { opacity: .4; cursor: default; }
+button.primary { background: var(--planner); border-color: var(--planner); color: #fff; }
+input, textarea, select { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; min-width: 0; }
+
+header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+header .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+header .grow { flex: 1 1 280px; }
+#workspace { flex: 1; }
+#status { font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--bg); border: 1px solid var(--border); font-size: 13px; }
+#round { color: var(--muted); font-size: 13px; }
+
+#body { flex: 1; display: flex; min-height: 0; }
+#mainCol { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.timeline { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.msg { border-left: 3px solid var(--c); background: var(--bg-c); border-radius: 6px; padding: 8px 10px; max-width: 900px; }
+#timeline .msg:not(.live) { cursor: pointer; }
+#timeline .msg:not(.live):hover { outline: 1px solid var(--border); }
+.msg .who { font-size: 12px; font-weight: 700; color: var(--c); text-transform: uppercase; letter-spacing: .04em; display: flex; gap: 8px; }
+.msg .who .meta { font-weight: 400; color: var(--muted); text-transform: none; letter-spacing: 0; }
+.msg .text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg details { margin-top: 6px; font-size: 13px; color: var(--muted); }
+.msg details pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0 0; font-size: 12px; }
+.r-aditya { --c: var(--aditya); --bg-c: var(--aditya-bg); align-self: flex-end; }
+.r-planner { --c: var(--planner); --bg-c: var(--planner-bg); }
+.r-executor { --c: var(--executor); --bg-c: var(--executor-bg); }
+.r-system { --c: var(--system); --bg-c: var(--system-bg); font-size: 13px; color: var(--muted); border-left-style: dashed; }
+.typing::after { content: '●●●'; display: inline-block; margin-left: 4px; color: var(--c); animation: blink 1.2s infinite; letter-spacing: 2px; font-size: 10px; }
+@keyframes blink { 50% { opacity: .2; } }
+
+.composer { display: flex; gap: 6px; padding: 8px 12px; background: var(--panel); border-top: 1px solid var(--border); }
+.composer textarea { flex: 1; resize: none; height: 44px; }
+#error { color: #dc2626; font-size: 13px; padding: 0 12px; }
+
+#branch { width: 420px; max-width: 45%; border-left: 1px solid var(--border); background: var(--panel); display: none; flex-direction: column; }
+#branch.open { display: flex; }
+#branch .bhead { padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+#branch .bhead strong { flex: 1; }
+#branch .quote { font-size: 13px; color: var(--muted); padding: 8px 12px; border-bottom: 1px solid var(--border); max-height: 120px; overflow-y: auto; white-space: pre-wrap; }
+
+@media (max-width: 700px) {
+  #branch { position: fixed; inset: 0; width: auto; max-width: none; z-index: 10; }
+  .msg { max-width: 100%; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="row grow">
+    <select id="runs" title="Runs"></select>
+    <input id="workspace" placeholder="Workspace folder, e.g. D:\Projects\thing">
+    <button id="newRun">New run</button>
+  </div>
+  <div class="row">
+    <span id="status">no run</span>
+    <span id="round"></span>
+    <button id="start" class="primary">Start loop</button>
+    <button id="pause">Pause</button>
+    <button id="resume">Resume</button>
+    <button id="stop">Stop</button>
+  </div>
+</header>
+
+<div id="body">
+  <div id="mainCol">
+    <div id="timeline" class="timeline"></div>
+    <div id="error"></div>
+    <form class="composer" id="mainForm">
+      <textarea id="mainInput" placeholder="Message the Planner (Enter to send, Shift+Enter for newline)"></textarea>
+      <button class="primary">Send</button>
+    </form>
+  </div>
+  <aside id="branch">
+    <div class="bhead">
+      <strong>Side thread</strong>
+      <button id="discard">Close (discard)</button>
+      <button id="sendNote">Close &amp; send note</button>
+    </div>
+    <div class="quote" id="quote"></div>
+    <div id="btimeline" class="timeline"></div>
+    <form class="composer" id="branchForm">
+      <textarea id="branchInput" placeholder="Ask about this message"></textarea>
+      <button class="primary">Ask</button>
+    </form>
+  </aside>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let cfg = {}, run = null, branch = null, msgs = [];
+const live = {};  // thread_id -> live bubble element
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) { $('error').textContent = data.detail || r.statusText; throw new Error(data.detail); }
+  $('error').textContent = '';
+  return data;
+}
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function details(summary, body) {
+  const d = el('details');
+  d.append(el('summary', '', summary), el('pre', '', body));
+  return d;
+}
+
+function renderMsg(m) {
+  const d = el('div', `msg r-${m.role}`);
+  d.dataset.id = m.id;
+  const who = el('div', 'who', m.role);
+  const meta = [];
+  if (m.meta.round) meta.push(`round ${m.meta.round}`);
+  if (m.meta.status) meta.push(m.meta.status);
+  meta.push(new Date(m.created_at).toLocaleTimeString());
+  who.append(el('span', 'meta', meta.join(' · ')));
+  d.append(who, el('div', 'text', m.content));
+  if (m.meta.tools?.length) d.append(details(`${m.meta.tools.length} tool calls`, m.meta.tools.join('\n')));
+  if (m.meta.diffstat) d.append(details('diff stat', m.meta.diffstat));
+  return d;
+}
+
+function timelineFor(thread_id) {
+  if (branch && thread_id === branch.id) return $('btimeline');
+  if (run && thread_id === run.main_thread) return $('timeline');
+  return null;
+}
+
+function scrollDown(t) { t.scrollTop = t.scrollHeight; }
+
+function addMsg(m) {
+  const t = timelineFor(m.thread_id);
+  if (!t) return;
+  live[m.thread_id]?.remove(); delete live[m.thread_id];
+  t.append(renderMsg(m));
+  scrollDown(t);
+}
+
+function liveBubble(thread_id, role) {
+  let b = live[thread_id];
+  if (!b) {
+    b = el('div', `msg live r-${role}`);
+    b.innerHTML = '<div class="who typing"></div><div class="text"></div>';
+    b.firstChild.textContent = role;
+    live[thread_id] = b;
+  }
+  const t = timelineFor(thread_id);
+  if (t && b.parentNode !== t) t.append(b);
+  return b;
+}
+
+function renderRun() {
+  const s = run?.status;
+  $('status').textContent = s || 'no run';
+  $('round').textContent = run ? `round ${run.round}/${cfg.max_rounds}` : '';
+  $('start').disabled = !run || !['discussing', 'done', 'stopped'].includes(s);
+  $('pause').disabled = s !== 'running';
+  $('resume').disabled = !['paused', 'stopped'].includes(s);
+  $('stop').disabled = !run || !(s === 'running' || Object.keys(live).length);
+  if (run) $('workspace').value = run.workspace;
+}
+
+async function loadRuns(selectId) {
+  const runs = await api('/api/runs');
+  $('runs').innerHTML = '';
+  for (const r of runs) $('runs').append(new Option(`#${r.id} ${r.workspace.split(/[\\/]/).pop()} (${r.status})`, r.id));
+  const id = selectId || runs[0]?.id;
+  if (id) { $('runs').value = id; await loadRun(id); } else renderRun();
+}
+
+async function loadRun(id) {
+  const data = await api(`/api/runs/${id}`);
+  run = {...data.run, main_thread: data.threads.find(t => t.kind === 'main').id};
+  msgs = data.messages;
+  closeBranch();
+  $('timeline').innerHTML = '';
+  for (const k in live) delete live[k];
+  for (const m of msgs) if (m.thread_id === run.main_thread) $('timeline').append(renderMsg(m));
+  scrollDown($('timeline'));
+  renderRun();
+}
+
+function openBranch(thread, parent) {
+  branch = thread;
+  $('quote').textContent = `${parent.role}: ${parent.content}`;
+  $('btimeline').innerHTML = '';
+  for (const m of msgs) if (m.thread_id === thread.id) $('btimeline').append(renderMsg(m));
+  $('branch').classList.add('open');
+  $('branchInput').focus();
+}
+
+function closeBranch() { branch = null; $('branch').classList.remove('open'); }
+
+// ---- events ----
+function connect() {
+  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+  ws.onmessage = e => {
+    const ev = JSON.parse(e.data);
+    const rid = ev.run_id ?? ev.run?.id ?? ev.msg?.run_id ?? ev.thread?.run_id;
+    if (!run || rid !== run.id) { if (ev.t === 'run') loadRuns(run?.id); return; }
+    if (ev.t === 'msg') { msgs.push(ev.msg); addMsg(ev.msg); }
+    else if (ev.t === 'run') { run = {...run, ...ev.run}; renderRun(); }
+    else if (ev.t === 'typing') {
+      if (ev.on) liveBubble(ev.thread_id, ev.role);
+      else { live[ev.thread_id]?.remove(); delete live[ev.thread_id]; }
+      renderRun();
+    } else if (ev.t === 'live' || ev.t === 'live_tool') {
+      const b = liveBubble(ev.thread_id, ev.role);
+      if (ev.t === 'live') b.lastChild.textContent += (b.lastChild.textContent ? '\n\n' : '') + ev.text;
+      else {
+        let d = b.querySelector('details');
+        if (!d) { d = details('', ''); b.insertBefore(d, b.lastChild); }
+        d.querySelector('pre').textContent += ev.tool + '\n';
+        d.querySelector('summary').textContent = `${d.querySelector('pre').textContent.trim().split('\n').length} tool calls`;
+      }
+      const t = timelineFor(ev.thread_id); if (t) scrollDown(t);
+    }
+  };
+  ws.onclose = () => setTimeout(() => { connect(); if (run) loadRun(run.id); }, 1500);
+  setInterval(() => ws.readyState === 1 && ws.send('ping'), 30000);
+}
+
+function sendOnEnter(input, form) {
+  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
+}
+
+$('mainForm').onsubmit = async e => {
+  e.preventDefault();
+  const text = $('mainInput').value.trim();
+  if (!text || !run) return;
+  await api(`/api/runs/${run.id}/message`, {text});
+  $('mainInput').value = '';
+};
+$('branchForm').onsubmit = async e => {
+  e.preventDefault();
+  const text = $('branchInput').value.trim();
+  if (!text || !branch) return;
+  await api(`/api/runs/${run.id}/message`, {text, thread_id: branch.id});
+  $('branchInput').value = '';
+};
+sendOnEnter($('mainInput'), $('mainForm'));
+sendOnEnter($('branchInput'), $('branchForm'));
+
+$('timeline').onclick = async e => {
+  const m = e.target.closest('.msg');
+  if (!m || m.classList.contains('live') || e.target.closest('details')) return;
+  const parent = msgs.find(x => x.id === +m.dataset.id);
+  openBranch(await api(`/api/runs/${run.id}/branches`, {message_id: parent.id}), parent);
+};
+$('discard').onclick = async () => { await api(`/api/threads/${branch.id}/close`, {}); closeBranch(); };
+$('sendNote').onclick = async () => {
+  const note = $('branchInput').value.trim();
+  if (!note) { $('error').textContent = 'Type the one-line note in the side-thread box first.'; return; }
+  await api(`/api/threads/${branch.id}/close`, {note});
+  $('branchInput').value = '';
+  closeBranch();
+};
+
+$('newRun').onclick = async () => {
+  const ws = $('workspace').value.trim();
+  if (!ws) return;
+  await loadRuns((await api('/api/runs', {workspace: ws})).id);
+};
+$('runs').onchange = () => loadRun(+$('runs').value);
+for (const a of ['start', 'pause', 'resume', 'stop']) $(a).onclick = () => api(`/api/runs/${run.id}/${a}`, {});
+
+(async () => {
+  cfg = await api('/api/config');
+  $('workspace').value = cfg.default_workspace;
+  await loadRuns();
+  connect();
+})();
+</script>
+</body>
+</html>

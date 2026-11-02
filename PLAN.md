@@ -13,9 +13,12 @@
 - [x] REST + websocket API
 
 ## Frontend
-- [ ] Timeline, live streaming, top bar controls, composer
-- [ ] Branch side panel, phone-width layout
+- [x] Timeline, live streaming, top bar controls, composer
+- [x] Branch side panel, phone-width layout
 
 ## Ship
-- [ ] run.bat + README notes on flag differences
-- [ ] Smoke test: real round, pause, branch
+- [x] run.bat + README notes on flag differences
+- [x] Smoke test: real round, pause, branch
+
+## Follow-ups
+- [ ] Click-test branch panel + live streaming in a real browser (Chrome extension was down during smoke test)

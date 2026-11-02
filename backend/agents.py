@@ -13,19 +13,23 @@ EXECUTOR_PROMPT = os.path.join(ROOT, "prompts", "executor.md")
 # --append-system-prompt-file isn't in `claude --help` but works (2.1.316); the .cmd shim would cut a
 # multi-line --append-system-prompt at the first newline. Prompt text goes via stdin for the same reason.
 # --permission-prompts none: anything outside the allowlist is denied instead of hanging a headless turn.
+def shell_rules(*cmds):
+    # On Windows the agents often pick the PowerShell tool over Bash, so allow both.
+    return [f"{tool}({c}:*)" for tool in ("Bash", "PowerShell") for c in cmds]
+
+
 COMMON = ["-p", "--output-format", "stream-json", "--verbose", "--permission-prompts", "none"]
 PLANNER_FLAGS = [
     "--append-system-prompt-file", PLANNER_PROMPT,
     "--disallowedTools", "Edit", "Write", "NotebookEdit",
-    "--allowedTools", "Read", "Glob", "Grep",
-    "Bash(git diff:*)", "Bash(git log:*)", "Bash(git status:*)", "Bash(git show:*)",
+    "--allowedTools", "Read", "Glob", "Grep", *shell_rules("git diff", "git log", "git status", "git show"),
 ]
 EXECUTOR_FLAGS = [
     "--append-system-prompt-file", EXECUTOR_PROMPT,
     "--permission-mode", "acceptEdits",
     "--allowedTools", "Read", "Edit", "Write", "Glob", "Grep",
-    *[f"Bash({c}:*)" for c in ("git status", "git diff", "git log", "git show", "python", "py", "pip",
-                               "pytest", "npm", "npx", "node", "ls", "mkdir", "cat")],
+    *shell_rules("git status", "git diff", "git log", "git show", "python", "py", "pip",
+                 "pytest", "npm", "npx", "node", "ls", "mkdir", "cat"),
 ]
 
 STATUS_RE = re.compile(r"STATUS:\W*(CONTINUE|DONE|NEED_ADITYA)")
