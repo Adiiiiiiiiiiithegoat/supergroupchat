@@ -41,6 +41,16 @@ EXECUTOR_FLAGS = [
 ]
 
 STATUS_RE = re.compile(r"STATUS:\W*(CONTINUE|DONE|NEED_ADITYA)")
+LIMIT_RE = re.compile(r"(usage|rate)[ _-]?limit|hit your (usage )?limit|limit (reached|exceeded)", re.I)
+
+
+def usage_limit(result, rate_info, text):
+    """None if the turn wasn't stopped by a usage/rate limit, else {"resets_at": unix ts or None}."""
+    rejected = (rate_info or {}).get("status") == "rejected"
+    is_error = result is None or bool(result.get("is_error"))
+    if rejected or (is_error and ((result or {}).get("api_error_status") == 429 or LIMIT_RE.search(text or ""))):
+        return {"resets_at": (rate_info or {}).get("resetsAt")}
+    return None
 
 
 def parse_status(text):
@@ -73,7 +83,7 @@ def kill_tree(pid):
 
 
 async def run_turn(role, prompt, cwd, *, resume=None, fork=False, on_text=None, on_tool=None, on_proc=None):
-    """Run one agent turn. Returns {text, session_id, is_error, tools}."""
+    """Run one agent turn. Returns {text, session_id, is_error, tools, limited}."""
     args = [claude_exe(), *COMMON, *(PLANNER_FLAGS if role == "planner" else EXECUTOR_FLAGS)]
     if resume:
         args += ["--resume", resume] + (["--fork-session"] if fork else [])
@@ -83,7 +93,7 @@ async def run_turn(role, prompt, cwd, *, resume=None, fork=False, on_text=None, 
         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     if on_proc:
         on_proc(proc)
-    result, tools = None, []
+    result, rate_info, tools = None, None, []
     stderr_task = asyncio.create_task(proc.stderr.read())
     try:
         proc.stdin.write(prompt.encode("utf-8"))
@@ -102,6 +112,8 @@ async def run_turn(role, prompt, cwd, *, resume=None, fork=False, on_text=None, 
                         tools.append(tool_summary(block))
                         if on_tool:
                             await on_tool(tools[-1])
+            elif ev.get("type") == "rate_limit_event":
+                rate_info = ev.get("rate_limit_info")
             elif ev.get("type") == "result":
                 result = ev
         await proc.wait()
@@ -110,10 +122,12 @@ async def run_turn(role, prompt, cwd, *, resume=None, fork=False, on_text=None, 
             kill_tree(proc.pid)
     err = (await stderr_task).decode("utf-8", "replace").strip()
     if result is None:
-        return {"text": f"[{role} exited with code {proc.returncode} and no result]\n{err[-2000:]}",
-                "session_id": None, "is_error": True, "tools": tools}
-    return {"text": result.get("result") or "", "session_id": result.get("session_id"),
-            "is_error": bool(result.get("is_error")), "tools": tools}
+        text = f"[{role} exited with code {proc.returncode} and no result]\n{err[-2000:]}"
+        return {"text": text, "session_id": None, "is_error": True, "tools": tools,
+                "limited": usage_limit(None, rate_info, text)}
+    text = result.get("result") or ""
+    return {"text": text, "session_id": result.get("session_id"), "is_error": bool(result.get("is_error")),
+            "tools": tools, "limited": usage_limit(result, rate_info, text)}
 
 
 if __name__ == "__main__":
@@ -123,4 +137,12 @@ if __name__ == "__main__":
     assert parse_status("no status here") == "NEED_ADITYA"
     assert strip_status("Edit hello.py\nSTATUS: CONTINUE") == "Edit hello.py"
     assert tool_summary({"name": "Bash", "input": {"command": "git status"}}) == "Bash: git status"
+    ok = {"is_error": False}
+    assert usage_limit(ok, {"status": "allowed", "resetsAt": 1}, "fine") is None
+    assert usage_limit(ok, {"status": "rejected", "resetsAt": 1}, "") == {"resets_at": 1}
+    assert usage_limit({"is_error": True, "api_error_status": 429}, None, "x") == {"resets_at": None}
+    assert usage_limit({"is_error": True}, None, "You've hit your limit · resets 3pm") is not None
+    assert usage_limit({"is_error": True}, None, "Claude AI usage limit reached|1700000000") is not None
+    assert usage_limit({"is_error": True}, None, "API Error: 500 overloaded") is None
+    assert usage_limit(ok, None, "we should add rate limiting to the API") is None  # normal text, not an error
     print("ok")

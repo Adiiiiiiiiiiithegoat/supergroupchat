@@ -61,6 +61,35 @@ async def test_planner_error_while_chatting_doesnt_retry():
     assert [m["role"] for m in main.pending_for_planner(r, t)] == ["aditya"]
 
 
+LIMITED = {"text": "You've hit your limit", "is_error": True, "limited": {"resets_at": 1793652000}}
+
+
+def commits(run_id):
+    return main.git(db.get_run(run_id)["workspace"], "rev-list", "--count", "HEAD")[0]
+
+
+async def test_executor_usage_limit_not_counted_or_committed():
+    r, t = new_run()
+    await main.post(r, t, "planner", "do it\nSTATUS: CONTINUE", {"status": "CONTINUE"})
+    before = commits(r)
+    await drive_with(r, ("executor", LIMITED))
+    run = db.get_run(r)
+    assert (run["status"], run["round"], commits(r)) == ("paused", 0, before)
+    assert roles(r)[-1] == "system" and "usage limit" in db.all_("SELECT content FROM messages WHERE run_id=?", r)[-1]["content"]
+    assert "executor" not in roles(r)
+    await drive_with(r, ("executor", {"text": "did it"}), ("planner", {"text": "ok\nSTATUS: DONE"}))  # Resume
+    assert prompts[0] == "do it"  # same instruction rerun
+    assert db.get_run(r)["round"] == 1 and commits(r) == str(int(before) + 1)
+
+
+async def test_planner_usage_limit_pauses_and_keeps_pending():
+    r, t = new_run()
+    await main.post(r, t, "planner", "do it\nSTATUS: CONTINUE", {"status": "CONTINUE"})
+    await drive_with(r, ("executor", {"text": "did it"}), ("planner", LIMITED))
+    assert db.get_run(r)["status"] == "paused"
+    assert [m["role"] for m in main.pending_for_planner(r, t)] == ["executor"]
+
+
 async def run_all():
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

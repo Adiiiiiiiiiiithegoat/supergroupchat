@@ -2,6 +2,7 @@ import asyncio
 import os
 import subprocess
 import traceback
+from datetime import datetime
 
 import uvicorn
 from dotenv import load_dotenv
@@ -95,11 +96,22 @@ def planner_prompt(msgs):
     return "\n\n---\n\n".join(parts)
 
 
+async def post_limit(run_id, thread_id, who, res):
+    ts = res["limited"].get("resets_at")
+    when = f" It resets around {datetime.fromtimestamp(ts):%H:%M on %b %d}." if ts else ""
+    await post(run_id, thread_id, "system",
+               f"{who} hit the Claude usage limit, so the run is paused.{when} Resume after the reset.\n\n{res['text']}",
+               {"limit": True})
+
+
 async def planner_step(run_id, thread, pending):
     run = db.get_run(run_id)
     res = await agent_turn(run_id, thread["id"], "planner", planner_prompt(pending), resume=run["planner_session"])
     if res["session_id"]:
         await set_run(run_id, planner_session=res["session_id"])
+    if res["limited"]:  # same as an error: inputs stay pending for the retry
+        await post_limit(run_id, thread["id"], "Planner", res)
+        return "ERROR"
     if res["is_error"]:
         # Not a planner message: pending_for_planner() counts from the last planner message,
         # so the executor report / Aditya's message stay pending and are re-sent on retry.
@@ -111,16 +123,22 @@ async def planner_step(run_id, thread, pending):
 
 
 async def executor_step(run_id, thread, instruction):
-    run = await set_run(run_id, round=db.get_run(run_id)["round"] + 1)
-    n, ws = run["round"], run["workspace"]
+    """Returns False if a usage limit cut it off: the round isn't counted or committed, and Resume reruns it."""
+    run = db.get_run(run_id)
+    n, ws = run["round"] + 1, run["workspace"]
     res = await agent_turn(run_id, thread["id"], "executor", instruction, resume=run["executor_session"])
     if res["session_id"]:
         await set_run(run_id, executor_session=res["session_id"])
+    if res["limited"]:
+        await post_limit(run_id, thread["id"], "Executor", res)
+        return False
+    await set_run(run_id, round=n)
     git(ws, "add", "-A")
     out, code = git(ws, "commit", "--allow-empty", "-m", f"sgc: round {n}")
     diffstat = git(ws, "diff", "--stat", "HEAD~1")[0] if code == 0 else f"commit failed: {out}"
     await post(run_id, thread["id"], "executor", res["text"],
                {"round": n, "diffstat": diffstat, "tools": res["tools"], "is_error": res["is_error"]})
+    return True
 
 
 async def drive(run_id):
@@ -158,7 +176,10 @@ async def drive(run_id):
                 await post(run_id, thread["id"], "system", f"Round cap ({MAX_ROUNDS}) reached; loop stopped.")
                 await set_run(run_id, status="stopped")
                 break
-            await executor_step(run_id, thread, strip_status(last["content"]))
+            if not await executor_step(run_id, thread, strip_status(last["content"])):
+                want_loop[run_id] = False
+                await set_run(run_id, status="paused")
+                break
             if not want_loop.get(run_id):
                 await post(run_id, thread["id"], "system", "Paused after executor step.")
     except Exception as e:
@@ -277,7 +298,10 @@ async def branch_turn(run_id, thread, text):
         res = await agent_turn(run_id, thread["id"], "planner", prompt, resume=resume, fork=fork)
         if res["session_id"]:
             db.conn.execute("UPDATE threads SET planner_session=? WHERE id=?", (res["session_id"], thread["id"]))
-        await post(run_id, thread["id"], "planner", res["text"], {"tools": res["tools"]})
+        if res["limited"]:
+            await post_limit(run_id, thread["id"], "Planner", res)
+        else:
+            await post(run_id, thread["id"], "planner", res["text"], {"tools": res["tools"]})
     finally:
         busy_threads.discard(thread["id"])
 

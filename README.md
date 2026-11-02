@@ -30,6 +30,11 @@ All spec flags exist. Changes:
   (`CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` also exists but drops the workspace CLAUDE.md too.)
 - `ANTHROPIC_API_KEY` is stripped from the child env so turns always use the Claude Pro login.
 - Sessions use the CLI default `--system-prompt-snapshot on`: an edit to `prompts/*.md` only affects new runs.
+- Usage/rate limits: a turn counts as limited if the stream's `rate_limit_event` says `rejected`, or the result is an
+  error with `api_error_status` 429 or limit wording ("usage limit", "hit your limit", ...). The run pauses with the
+  reset time. A limited Executor turn isn't counted as a round or committed; Resume reruns the same instruction.
+  This was tested with simulated results only, because I couldn't trigger a real limit, so the exact wording a real
+  limit produces is a best guess.
 - Round cap sets status `stopped`. Planner `NEED_ADITYA` sets `paused` (reply, then Resume).
 - While paused, an executor report waits for Resume before the Planner reviews it, unless you send a message (then
   the Planner gets the report and your message together).
