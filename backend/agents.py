@@ -10,15 +10,23 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PLANNER_PROMPT = os.path.join(ROOT, "prompts", "planner.md")
 EXECUTOR_PROMPT = os.path.join(ROOT, "prompts", "executor.md")
 
-# --append-system-prompt-file isn't in `claude --help` but works (2.1.316); the .cmd shim would cut a
-# multi-line --append-system-prompt at the first newline. Prompt text goes via stdin for the same reason.
-# --permission-prompts none: anything outside the allowlist is denied instead of hanging a headless turn.
+# Keep Aditya's user-level ~/.claude/CLAUDE.md out of agent sessions; the workspace's own CLAUDE.md still loads.
+# --setting-sources doesn't do this in 2.1.316 (tested); claudeMdExcludes via --settings does.
+AGENT_SETTINGS = os.path.join(ROOT, "data", "agent-settings.json")
+with open(AGENT_SETTINGS, "w", encoding="utf-8") as f:
+    json.dump({"claudeMdExcludes": [os.path.expanduser("~/.claude/CLAUDE.md").replace("\\", "/")]}, f)
+
+
 def shell_rules(*cmds):
     # On Windows the agents often pick the PowerShell tool over Bash, so allow both.
     return [f"{tool}({c}:*)" for tool in ("Bash", "PowerShell") for c in cmds]
 
 
-COMMON = ["-p", "--output-format", "stream-json", "--verbose", "--permission-prompts", "none"]
+# --append-system-prompt-file isn't in `claude --help` but works (2.1.316); the .cmd shim would cut a
+# multi-line --append-system-prompt at the first newline. Prompt text goes via stdin for the same reason.
+# --permission-prompts none: anything outside the allowlist is denied instead of hanging a headless turn.
+COMMON = ["-p", "--output-format", "stream-json", "--verbose", "--permission-prompts", "none",
+          "--settings", AGENT_SETTINGS]
 PLANNER_FLAGS = [
     "--append-system-prompt-file", PLANNER_PROMPT,
     "--disallowedTools", "Edit", "Write", "NotebookEdit",

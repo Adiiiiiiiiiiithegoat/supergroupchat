@@ -23,6 +23,11 @@ All spec flags exist. Changes:
 - The prompt always goes via stdin, never argv: same newline problem, and `--allowedTools` is variadic so a trailing
   positional prompt would be eaten as a tool name.
 - Added `--permission-prompts none`, so a tool outside the allowlist is denied instead of hanging a headless turn.
+- Your user-level `~/.claude/CLAUDE.md` is kept out of Planner/Executor sessions. `--setting-sources project,local`
+  does **not** do this in 2.1.316 (tested: the user CLAUDE.md still loaded). The backend writes
+  `data/agent-settings.json` with `{"claudeMdExcludes": ["C:/Users/<you>/.claude/CLAUDE.md"]}` and passes it via
+  `--settings`. Tested with a real turn: the user file is gone, the workspace's own CLAUDE.md still loads.
+  (`CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` also exists but drops the workspace CLAUDE.md too.)
 - `ANTHROPIC_API_KEY` is stripped from the child env so turns always use the Claude Pro login.
 - Sessions use the CLI default `--system-prompt-snapshot on`: an edit to `prompts/*.md` only affects new runs.
 - Round cap sets status `stopped`. Planner `NEED_ADITYA` sets `paused` (reply, then Resume).
