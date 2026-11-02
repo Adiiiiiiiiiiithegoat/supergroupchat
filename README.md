@@ -28,6 +28,11 @@ All spec flags exist. Changes:
   `data/agent-settings.json` with `{"claudeMdExcludes": ["C:/Users/<you>/.claude/CLAUDE.md"]}` and passes it via
   `--settings`. Tested with a real turn: the user file is gone, the workspace's own CLAUDE.md still loads.
   (`CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` also exists but drops the workspace CLAUDE.md too.)
+  Because `claudeMdExcludes` is undocumented, every server start runs a background self-check: one short Planner
+  turn with the normal flags in a temp folder whose CLAUDE.md holds a random marker. The agent must echo the marker,
+  answer `USER_CLAUDE_MD=NO`, and not quote your CLAUDE.md's first line. Otherwise a warning banner appears on the
+  page (also returned in `/api/config`) and is printed in the console with the CLI version. `SKIP_STARTUP_CHECK=1` in
+  `.env` turns it off.
 - `ANTHROPIC_API_KEY` is stripped from the child env so turns always use the Claude Pro login.
 - Sessions use the CLI default `--system-prompt-snapshot on`: an edit to `prompts/*.md` only affects new runs.
 - Usage/rate limits: a turn counts as limited if the stream's `rate_limit_event` says `rejected`, or the result is an

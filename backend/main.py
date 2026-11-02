@@ -2,6 +2,7 @@ import asyncio
 import os
 import subprocess
 import traceback
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 import uvicorn
@@ -11,7 +12,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from . import db
-from .agents import kill_tree, parse_status, run_turn, strip_status
+from .agents import check_claude_md_exclusion, kill_tree, parse_status, run_turn, strip_status
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(ROOT, ".env"))
@@ -19,8 +20,40 @@ PORT = int(os.getenv("PORT", "8787"))
 MAX_ROUNDS = int(os.getenv("MAX_ROUNDS", "15"))
 DEFAULT_WORKSPACE = os.getenv("DEFAULT_WORKSPACE", "")
 INDEX = os.path.join(ROOT, "frontend", "index.html")
+SKIP_STARTUP_CHECK = os.getenv("SKIP_STARTUP_CHECK") == "1"
+startup_warning = None
 
-app = FastAPI()
+
+def reset_stale_runs():
+    # Drivers and processes don't survive a restart, so 'running' would be a lie; Resume picks up from the db.
+    db.conn.execute("UPDATE runs SET status='paused' WHERE status='running'")
+
+
+async def startup_check():
+    """claudeMdExcludes is undocumented; make sure a CLI update hasn't silently broken it."""
+    global startup_warning
+    try:
+        warning, version = await check_claude_md_exclusion()
+    except Exception as e:
+        warning, version = f"CLAUDE.md self-check errored: {e!r}", "unknown"
+    print(f"[sgc] CLAUDE.md exclusion self-check, Claude Code {version}: {'FAILED' if warning else 'ok'}", flush=True)
+    if warning:
+        startup_warning = f"{warning} (Claude Code {version})"
+        print(f"[sgc] WARNING: {startup_warning}", flush=True)
+        await broadcast(t="warning", text=startup_warning)
+
+
+@asynccontextmanager
+async def lifespan(app):
+    reset_stale_runs()
+    if SKIP_STARTUP_CHECK:
+        print("[sgc] CLAUDE.md self-check skipped (SKIP_STARTUP_CHECK=1)", flush=True)
+    else:
+        asyncio.create_task(startup_check())  # background: costs one short turn, mustn't block the page
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 sockets: set[WebSocket] = set()
 # ponytail: in-memory per-run state; reset_stale_runs() pauses leftover 'running' runs at startup
 want_loop: dict[int, bool] = {}
@@ -232,7 +265,7 @@ def index():
 
 @app.get("/api/config")
 def config():
-    return {"max_rounds": MAX_ROUNDS, "default_workspace": DEFAULT_WORKSPACE}
+    return {"max_rounds": MAX_ROUNDS, "default_workspace": DEFAULT_WORKSPACE, "warning": startup_warning}
 
 
 @app.get("/api/runs")
@@ -378,12 +411,6 @@ async def ws_endpoint(ws: WebSocket):
         sockets.discard(ws)
 
 
-def reset_stale_runs():
-    # Drivers and processes don't survive a restart, so 'running' would be a lie; Resume picks up from the db.
-    db.conn.execute("UPDATE runs SET status='paused' WHERE status='running'")
-
-
 if __name__ == "__main__":
-    reset_stale_runs()
     # No reload: reload mode can swap in the selector loop, which can't spawn subprocesses on Windows.
     uvicorn.run(app, host="127.0.0.1", port=PORT)

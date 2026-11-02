@@ -5,6 +5,8 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
+import uuid
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PLANNER_PROMPT = os.path.join(ROOT, "prompts", "planner.md")
@@ -12,9 +14,10 @@ EXECUTOR_PROMPT = os.path.join(ROOT, "prompts", "executor.md")
 
 # Keep Aditya's user-level ~/.claude/CLAUDE.md out of agent sessions; the workspace's own CLAUDE.md still loads.
 # --setting-sources doesn't do this in 2.1.316 (tested); claudeMdExcludes via --settings does.
+USER_CLAUDE_MD = os.path.expanduser("~/.claude/CLAUDE.md")
 AGENT_SETTINGS = os.path.join(ROOT, "data", "agent-settings.json")
 with open(AGENT_SETTINGS, "w", encoding="utf-8") as f:
-    json.dump({"claudeMdExcludes": [os.path.expanduser("~/.claude/CLAUDE.md").replace("\\", "/")]}, f)
+    json.dump({"claudeMdExcludes": [USER_CLAUDE_MD.replace("\\", "/")]}, f)
 
 
 def shell_rules(*cmds):
@@ -93,7 +96,7 @@ async def run_turn(role, prompt, cwd, *, resume=None, fork=False, on_text=None, 
         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     if on_proc:
         on_proc(proc)
-    result, rate_info, tools = None, None, []
+    result, rate_info, tools, version = None, None, [], None
     stderr_task = asyncio.create_task(proc.stderr.read())
     try:
         proc.stdin.write(prompt.encode("utf-8"))
@@ -112,6 +115,8 @@ async def run_turn(role, prompt, cwd, *, resume=None, fork=False, on_text=None, 
                         tools.append(tool_summary(block))
                         if on_tool:
                             await on_tool(tools[-1])
+            elif ev.get("type") == "system" and ev.get("subtype") == "init":
+                version = ev.get("claude_code_version")
             elif ev.get("type") == "rate_limit_event":
                 rate_info = ev.get("rate_limit_info")
             elif ev.get("type") == "result":
@@ -124,10 +129,48 @@ async def run_turn(role, prompt, cwd, *, resume=None, fork=False, on_text=None, 
     if result is None:
         text = f"[{role} exited with code {proc.returncode} and no result]\n{err[-2000:]}"
         return {"text": text, "session_id": None, "is_error": True, "tools": tools,
-                "limited": usage_limit(None, rate_info, text)}
+                "limited": usage_limit(None, rate_info, text), "version": version}
     text = result.get("result") or ""
     return {"text": text, "session_id": result.get("session_id"), "is_error": bool(result.get("is_error")),
-            "tools": tools, "limited": usage_limit(result, rate_info, text)}
+            "tools": tools, "limited": usage_limit(result, rate_info, text), "version": version}
+
+
+SELFCHECK_PROMPT = """Startup self-check. Do not use any tools; answer from the CLAUDE.md contents already in your context.
+Line 1: the self-check marker from the workspace CLAUDE.md, verbatim, or NONE.
+Line 2: USER_CLAUDE_MD=YES if your context includes the contents of a user-level CLAUDE.md (the one in the \
+user's home .claude folder, the user's private global instructions), otherwise USER_CLAUDE_MD=NO.
+Line 3: only if YES, the first line of that user-level file, verbatim."""
+
+
+def selfcheck_verdict(text, marker, user_first_line):
+    """None if the exclusion held, else a warning."""
+    if marker not in text:
+        return "CLAUDE.md self-check was inconclusive: the agent didn't echo the workspace CLAUDE.md marker."
+    if "USER_CLAUDE_MD=YES" in text or user_first_line in text:
+        return "Your user-level ~/.claude/CLAUDE.md is loading into agent sessions (claudeMdExcludes stopped working?)."
+    if "USER_CLAUDE_MD=NO" not in text:
+        return "CLAUDE.md self-check was inconclusive: no USER_CLAUDE_MD answer."
+    return None
+
+
+async def check_claude_md_exclusion():
+    """One real planner turn in a temp folder with the normal flags. Returns (warning or None, CLI version)."""
+    try:
+        with open(USER_CLAUDE_MD, encoding="utf-8") as f:
+            first_line = next(l.strip() for l in f if l.strip())
+    except (FileNotFoundError, StopIteration):
+        return None, "not checked (no user CLAUDE.md)"
+    marker = f"SGC-SELFCHECK-{uuid.uuid4().hex[:12]}"
+    tmp = tempfile.mkdtemp(prefix="sgc-selfcheck-")
+    try:
+        with open(os.path.join(tmp, "CLAUDE.md"), "w", encoding="utf-8") as f:
+            f.write(f"Self-check marker: {marker}\n")
+        res = await run_turn("planner", SELFCHECK_PROMPT, tmp)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    if res["is_error"]:
+        return f"CLAUDE.md self-check errored: {res['text'][:300]}", res["version"] or "unknown"
+    return selfcheck_verdict(res["text"], marker, first_line), res["version"] or "unknown"
 
 
 if __name__ == "__main__":
@@ -145,4 +188,10 @@ if __name__ == "__main__":
     assert usage_limit({"is_error": True}, None, "Claude AI usage limit reached|1700000000") is not None
     assert usage_limit({"is_error": True}, None, "API Error: 500 overloaded") is None
     assert usage_limit(ok, None, "we should add rate limiting to the API") is None  # normal text, not an error
+    m, first = "SGC-SELFCHECK-abc", "# Public API lookup"
+    assert selfcheck_verdict(f"{m}\nUSER_CLAUDE_MD=NO\nSTATUS: NEED_ADITYA", m, first) is None
+    assert "loading" in selfcheck_verdict(f"{m}\nUSER_CLAUDE_MD=YES\n{first}", m, first)
+    assert "loading" in selfcheck_verdict(f"{m}\nUSER_CLAUDE_MD=NO\n{first}", m, first)  # quoted it anyway
+    assert "inconclusive" in selfcheck_verdict("NONE\nUSER_CLAUDE_MD=NO", m, first)
+    assert "inconclusive" in selfcheck_verdict(f"{m}\nnot sure", m, first)
     print("ok")

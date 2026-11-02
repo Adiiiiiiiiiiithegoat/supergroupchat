@@ -29,3 +29,7 @@
 - [x] Default .gitignore for new workspaces
 - [x] Keep user ~/.claude/CLAUDE.md out of agent sessions (claudeMdExcludes)
 - [x] Reset 'running' runs to 'paused' on startup
+
+## Hardening
+- [x] Startup self-check for the CLAUDE.md exclusion (banner + console, SKIP_STARTUP_CHECK)
+- [ ] Auto-resume after a usage limit (scheduled, cancellable, survives restart)

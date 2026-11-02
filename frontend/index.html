@@ -33,6 +33,8 @@ header .grow { flex: 1 1 280px; }
 #status { font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--bg); border: 1px solid var(--border); font-size: 13px; }
 #round { color: var(--muted); font-size: 13px; }
 
+#warning { background: #fef3c7; color: #78350f; border-bottom: 1px solid #f59e0b; padding: 8px 12px; font-size: 14px; }
+#warning[hidden] { display: none; }
 #body { flex: 1; display: flex; min-height: 0; }
 #mainCol { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .timeline { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
@@ -83,6 +85,7 @@ header .grow { flex: 1 1 280px; }
     <button id="stop">Stop</button>
   </div>
 </header>
+<div id="warning" role="alert" hidden></div>
 
 <div id="body">
   <div id="mainCol">
@@ -218,6 +221,11 @@ function openBranch(thread, parent) {
   $('branchInput').focus();
 }
 
+function showWarning(text) {
+  $('warning').textContent = `⚠ ${text}`;
+  $('warning').hidden = !text;
+}
+
 function closeBranch() { branch = null; $('branch').classList.remove('open'); }
 
 // ---- events ----
@@ -225,6 +233,7 @@ function connect() {
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   ws.onmessage = e => {
     const ev = JSON.parse(e.data);
+    if (ev.t === 'warning') return showWarning(ev.text);
     const rid = ev.run_id ?? ev.run?.id ?? ev.msg?.run_id ?? ev.thread?.run_id;
     if (!run || rid !== run.id) { if (ev.t === 'run') loadRuns(run?.id); return; }
     if (ev.t === 'msg') { msgs.push(ev.msg); addMsg(ev.msg); }
@@ -295,6 +304,7 @@ for (const a of ['start', 'pause', 'resume', 'stop']) $(a).onclick = () => api(`
 
 (async () => {
   cfg = await api('/api/config');
+  showWarning(cfg.warning);
   $('workspace').value = cfg.default_workspace;
   await loadRuns();
   connect();
