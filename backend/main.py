@@ -100,7 +100,12 @@ async def planner_step(run_id, thread, pending):
     res = await agent_turn(run_id, thread["id"], "planner", planner_prompt(pending), resume=run["planner_session"])
     if res["session_id"]:
         await set_run(run_id, planner_session=res["session_id"])
-    status = "ERROR" if res["is_error"] else parse_status(res["text"])
+    if res["is_error"]:
+        # Not a planner message: pending_for_planner() counts from the last planner message,
+        # so the executor report / Aditya's message stay pending and are re-sent on retry.
+        await post(run_id, thread["id"], "system", f"Planner turn failed. Resume or send a message to retry.\n\n{res['text']}")
+        return "ERROR"
+    status = parse_status(res["text"])
     await post(run_id, thread["id"], "planner", res["text"], {"status": status, "tools": res["tools"]})
     return status
 
@@ -128,11 +133,11 @@ async def drive(run_id):
             # paused with only an executor report waiting: hold the review until Resume
             if pending and (looping or any(m["role"] != "executor" for m in pending)):
                 status = await planner_step(run_id, thread, pending)
-                if status == "ERROR":
+                if status == "ERROR":  # stop; the pending messages are still pending, so no hot retry loop
                     want_loop[run_id] = False
-                    await post(run_id, thread["id"], "system", "Planner turn failed; loop paused.")
                     if looping:
                         await set_run(run_id, status="paused")
+                    break
                 continue
             if not looping:
                 break
