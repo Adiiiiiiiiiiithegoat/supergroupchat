@@ -32,6 +32,9 @@ header .grow { flex: 1 1 280px; }
 #workspace { flex: 1; }
 #status { font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--bg); border: 1px solid var(--border); font-size: 13px; }
 #round { color: var(--muted); font-size: 13px; }
+#auto { font-size: 13px; display: inline-flex; gap: 6px; align-items: center; }
+#auto[hidden] { display: none; }
+#auto button { padding: 2px 8px; }
 
 #warning { background: #fef3c7; color: #78350f; border-bottom: 1px solid #f59e0b; padding: 8px 12px; font-size: 14px; }
 #warning[hidden] { display: none; }
@@ -79,6 +82,7 @@ header .grow { flex: 1 1 280px; }
   <div class="row">
     <span id="status">no run</span>
     <span id="round"></span>
+    <span id="auto" hidden>Auto-resuming at <b id="autoAt"></b> <button id="cancelAuto">Cancel</button></span>
     <button id="start" class="primary">Start loop</button>
     <button id="pause">Pause</button>
     <button id="resume">Resume</button>
@@ -189,6 +193,9 @@ function renderRun() {
   $('pause').disabled = s !== 'running';
   $('resume').disabled = !['paused', 'stopped'].includes(s);
   $('stop').disabled = !run || !(s === 'running' || Object.keys(live).length);
+  $('auto').hidden = !run?.auto_resume_at;
+  if (run?.auto_resume_at) $('autoAt').textContent = new Date(run.auto_resume_at * 1000)
+    .toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
   if (run) $('workspace').value = run.workspace;
 }
 
@@ -301,6 +308,7 @@ $('newRun').onclick = async () => {
 };
 $('runs').onchange = () => loadRun(+$('runs').value);
 for (const a of ['start', 'pause', 'resume', 'stop']) $(a).onclick = () => api(`/api/runs/${run.id}/${a}`, {});
+$('cancelAuto').onclick = () => api(`/api/runs/${run.id}/cancel_auto`, {});
 
 (async () => {
   cfg = await api('/api/config');

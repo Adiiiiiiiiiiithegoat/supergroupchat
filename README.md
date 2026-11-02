@@ -40,6 +40,10 @@ All spec flags exist. Changes:
   reset time. A limited Executor turn isn't counted as a round or committed; Resume reruns the same instruction.
   This was tested with simulated results only, because I couldn't trigger a real limit, so the exact wording a real
   limit produces is a best guess.
+- Auto-resume: if the loop was running and the reset time is known, the run auto-resumes 60s after the reset. The
+  top bar shows "Auto-resuming at …" with a Cancel button. Stop, manual Start/Resume, or a main-thread message also
+  cancel it. The time is stored on the run (`auto_resume_at`) and re-scheduled on server start; an overdue one fires
+  right away. If the reset time is unknown, it just pauses and waits for you.
 - Round cap sets status `stopped`. Planner `NEED_ADITYA` sets `paused` (reply, then Resume).
 - While paused, an executor report waits for Resume before the Planner reviews it, unless you send a message (then
   the Planner gets the report and your message together).

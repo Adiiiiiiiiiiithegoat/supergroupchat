@@ -32,4 +32,4 @@
 
 ## Hardening
 - [x] Startup self-check for the CLAUDE.md exclusion (banner + console, SKIP_STARTUP_CHECK)
-- [ ] Auto-resume after a usage limit (scheduled, cancellable, survives restart)
+- [x] Auto-resume after a usage limit (scheduled, cancellable, survives restart)

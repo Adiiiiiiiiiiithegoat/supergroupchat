@@ -9,7 +9,8 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs(
   id INTEGER PRIMARY KEY, workspace TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'discussing' CHECK(status IN ('discussing','running','paused','done','stopped')),
-  round INTEGER NOT NULL DEFAULT 0, planner_session TEXT, executor_session TEXT, created_at TEXT NOT NULL);
+  round INTEGER NOT NULL DEFAULT 0, planner_session TEXT, executor_session TEXT, created_at TEXT NOT NULL,
+  auto_resume_at REAL);
 CREATE TABLE IF NOT EXISTS threads(
   id INTEGER PRIMARY KEY, run_id INTEGER NOT NULL REFERENCES runs(id),
   kind TEXT NOT NULL CHECK(kind IN ('main','branch')), parent_message_id INTEGER,
@@ -24,6 +25,10 @@ CREATE TABLE IF NOT EXISTS messages(
 conn = sqlite3.connect(DB_PATH, check_same_thread=False, isolation_level=None)
 conn.row_factory = sqlite3.Row
 conn.executescript(SCHEMA)
+try:  # dbs created before auto-resume existed
+    conn.execute("ALTER TABLE runs ADD COLUMN auto_resume_at REAL")  # unix seconds
+except sqlite3.OperationalError:
+    pass
 
 
 def now():

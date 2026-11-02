@@ -1,6 +1,7 @@
 import asyncio
 import os
 import subprocess
+import time
 import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -21,6 +22,7 @@ MAX_ROUNDS = int(os.getenv("MAX_ROUNDS", "15"))
 DEFAULT_WORKSPACE = os.getenv("DEFAULT_WORKSPACE", "")
 INDEX = os.path.join(ROOT, "frontend", "index.html")
 SKIP_STARTUP_CHECK = os.getenv("SKIP_STARTUP_CHECK") == "1"
+AUTO_RESUME_GRACE = 60  # seconds after a usage-limit reset before auto-resuming
 startup_warning = None
 
 
@@ -46,6 +48,7 @@ async def startup_check():
 @asynccontextmanager
 async def lifespan(app):
     reset_stale_runs()
+    reschedule_auto_resumes()
     if SKIP_STARTUP_CHECK:
         print("[sgc] CLAUDE.md self-check skipped (SKIP_STARTUP_CHECK=1)", flush=True)
     else:
@@ -60,6 +63,7 @@ want_loop: dict[int, bool] = {}
 drivers: dict[int, asyncio.Task] = {}
 procs: dict[int, set] = {}
 busy_threads: set[int] = set()
+auto_resumes: dict[int, asyncio.Task] = {}
 
 
 async def broadcast(**event):
@@ -129,12 +133,56 @@ def planner_prompt(msgs):
     return "\n\n---\n\n".join(parts)
 
 
-async def post_limit(run_id, thread_id, who, res):
+async def post_limit(run_id, thread_id, who, res, loop=False):
+    """Report a usage limit; if the loop was running and the reset time is known, schedule an auto-resume."""
     ts = res["limited"].get("resets_at")
-    when = f" It resets around {datetime.fromtimestamp(ts):%H:%M on %b %d}." if ts else ""
+    if ts and loop:
+        at = ts + AUTO_RESUME_GRACE
+        await set_run(run_id, auto_resume_at=at)
+        schedule_auto_resume(run_id, at)
+        tail = f" Auto-resuming at {datetime.fromtimestamp(at):%H:%M on %b %d}."
+    elif ts:
+        tail = f" It resets around {datetime.fromtimestamp(ts):%H:%M on %b %d}. Resume after the reset."
+    else:
+        tail = " Resume after the reset."
     await post(run_id, thread_id, "system",
-               f"{who} hit the Claude usage limit, so the run is paused.{when} Resume after the reset.\n\n{res['text']}",
-               {"limit": True})
+               f"{who} hit the Claude usage limit, so the run is paused.{tail}\n\n{res['text']}", {"limit": True})
+
+
+def schedule_auto_resume(run_id, at):
+    if old := auto_resumes.pop(run_id, None):
+        old.cancel()
+    auto_resumes[run_id] = asyncio.create_task(auto_resume(run_id, at))
+
+
+async def auto_resume(run_id, at):
+    await asyncio.sleep(max(0, at - time.time()))
+    while run_id in drivers:  # the driver that hit the limit may still be winding down
+        await asyncio.sleep(0.1)
+    auto_resumes.pop(run_id, None)
+    run = await set_run(run_id, auto_resume_at=None)
+    if run["status"] == "paused":
+        await post(run_id, db.main_thread(run_id)["id"], "system", "Usage limit should have reset; auto-resuming.")
+        await resume_loop(run_id)
+
+
+async def cancel_auto_resume(run_id):
+    if task := auto_resumes.pop(run_id, None):
+        task.cancel()
+    if db.get_run(run_id)["auto_resume_at"] is not None:
+        await set_run(run_id, auto_resume_at=None)
+
+
+def reschedule_auto_resumes():
+    # scheduled tasks die with the server; the time is on the run, so put them back (overdue ones fire at once)
+    for run in db.all_("SELECT id, auto_resume_at FROM runs WHERE auto_resume_at IS NOT NULL"):
+        schedule_auto_resume(run["id"], run["auto_resume_at"])
+
+
+async def resume_loop(run_id):
+    want_loop[run_id] = True
+    await set_run(run_id, status="running")
+    kick(run_id)
 
 
 async def planner_step(run_id, thread, pending):
@@ -143,7 +191,7 @@ async def planner_step(run_id, thread, pending):
     if res["session_id"]:
         await set_run(run_id, planner_session=res["session_id"])
     if res["limited"]:  # same as an error: inputs stay pending for the retry
-        await post_limit(run_id, thread["id"], "Planner", res)
+        await post_limit(run_id, thread["id"], "Planner", res, loop=want_loop.get(run_id))
         return "ERROR"
     if res["is_error"]:
         # Not a planner message: pending_for_planner() counts from the last planner message,
@@ -163,7 +211,7 @@ async def executor_step(run_id, thread, instruction):
     if res["session_id"]:
         await set_run(run_id, executor_session=res["session_id"])
     if res["limited"]:
-        await post_limit(run_id, thread["id"], "Executor", res)
+        await post_limit(run_id, thread["id"], "Executor", res, loop=True)
         return False
     await set_run(run_id, round=n)
     git(ws, "add", "-A")
@@ -312,6 +360,7 @@ async def message(run_id: int, body: Msg):
     if not thread or thread["status"] != "open":
         raise HTTPException(400, "thread not open")
     if thread["kind"] == "main":
+        await cancel_auto_resume(run_id)  # Aditya is taking over; don't resume behind his back
         await post(run_id, thread["id"], "aditya", text)
         kick(run_id)  # a running driver picks it up as pending context
         return {"ok": True}
@@ -374,18 +423,21 @@ async def control(run_id: int, action: str):
     if action in ("start", "resume"):
         if want_loop.get(run_id):
             raise HTTPException(409, "already running")
+        await cancel_auto_resume(run_id)
         if action == "start":
             await post(run_id, main["id"], "system",
                        "Aditya pressed Start. Write the first instruction for the Executor now.", {"to_planner": True})
-        want_loop[run_id] = True
-        await set_run(run_id, status="running")
-        kick(run_id)
+        await resume_loop(run_id)
+    elif action == "cancel_auto":
+        await cancel_auto_resume(run_id)
+        await post(run_id, main["id"], "system", "Auto-resume cancelled; Resume when you're ready.")
     elif action == "pause":
         if run["status"] != "running":
             raise HTTPException(409, "not running")
         want_loop[run_id] = False
         await post(run_id, main["id"], "system", "Pause requested; stopping after the current step.")
     elif action == "stop":
+        await cancel_auto_resume(run_id)
         want_loop[run_id] = False
         for p in procs.pop(run_id, set()):
             if p.returncode is None:

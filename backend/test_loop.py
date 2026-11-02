@@ -2,6 +2,7 @@
 import asyncio
 import os
 import tempfile
+import time
 
 tmp = tempfile.mkdtemp()
 os.environ["SGC_DB"] = os.path.join(tmp, "test.db")
@@ -61,7 +62,7 @@ async def test_planner_error_while_chatting_doesnt_retry():
     assert [m["role"] for m in main.pending_for_planner(r, t)] == ["aditya"]
 
 
-LIMITED = {"text": "You've hit your limit", "is_error": True, "limited": {"resets_at": 1793652000}}
+LIMITED = {"text": "You've hit your limit", "is_error": True, "limited": {"resets_at": None}}  # reset time unknown
 
 
 def commits(run_id):
@@ -75,6 +76,7 @@ async def test_executor_usage_limit_not_counted_or_committed():
     await drive_with(r, ("executor", LIMITED))
     run = db.get_run(r)
     assert (run["status"], run["round"], commits(r)) == ("paused", 0, before)
+    assert run["auto_resume_at"] is None and r not in main.auto_resumes  # unknown reset: wait for Aditya
     assert roles(r)[-1] == "system" and "usage limit" in db.all_("SELECT content FROM messages WHERE run_id=?", r)[-1]["content"]
     assert "executor" not in roles(r)
     await drive_with(r, ("executor", {"text": "did it"}), ("planner", {"text": "ok\nSTATUS: DONE"}))  # Resume
@@ -109,6 +111,72 @@ async def test_startup_pauses_running_runs():
     db.update_run(b, status="done")
     main.reset_stale_runs()
     assert (db.get_run(a)["status"], db.get_run(b)["status"]) == ("paused", "done")
+
+
+main.AUTO_RESUME_GRACE = 0
+OK, DONE = ("executor", {"text": "did it"}), ("planner", {"text": "ok\nSTATUS: DONE"})
+
+
+def limited_for(seconds):
+    return {"text": "You've hit your limit", "is_error": True, "limited": {"resets_at": time.time() + seconds}}
+
+
+async def limited_run(seconds=0.3):
+    """A running loop whose executor hits a usage limit with a known reset time."""
+    r, t = new_run()
+    await main.post(r, t, "planner", "do it\nSTATUS: CONTINUE", {"status": "CONTINUE"})
+    await drive_with(r, ("executor", limited_for(seconds)))
+    run = db.get_run(r)
+    assert run["status"] == "paused" and run["auto_resume_at"] and r in main.auto_resumes
+    return r
+
+
+async def settle(r):
+    if r in main.drivers:
+        await main.drivers[r]
+
+
+async def test_auto_resume_fires_after_reset():
+    r = await limited_run()
+    script[:] = [OK, DONE]
+    await main.auto_resumes[r]
+    await settle(r)
+    run = db.get_run(r)
+    assert (run["status"], run["round"], run["auto_resume_at"]) == ("done", 1, None)
+    assert not script
+
+
+async def test_auto_resume_cancelled_by_button_stop_message_or_manual_resume():
+    triggers = {
+        "cancel_auto": ([], lambda r: main.control(r, "cancel_auto"), "paused"),
+        "stop": ([], lambda r: main.control(r, "stop"), "stopped"),
+        "message": ([("planner", {"text": "noted\nSTATUS: NEED_ADITYA"})],
+                    lambda r: main.message(r, main.Msg(text="hold on")), "paused"),
+        "resume": ([OK, DONE], lambda r: main.control(r, "resume"), "done"),
+    }
+    for name, (turns, trigger, final) in triggers.items():
+        r = await limited_run(0.5)
+        task = main.auto_resumes[r]
+        script[:] = turns
+        await trigger(r)
+        await settle(r)
+        await asyncio.sleep(0.8)  # well past the reset: a surviving auto-resume would have fired by now
+        await settle(r)
+        run = db.get_run(r)
+        assert task.cancelled() and r not in main.auto_resumes, name
+        assert (run["status"], run["auto_resume_at"]) == (final, None), (name, run["status"])
+        assert not script, name
+
+
+async def test_restart_reschedules_auto_resume():
+    r = await limited_run()
+    main.auto_resumes.pop(r).cancel()  # the server died: in-memory task gone, time still on the run
+    assert db.get_run(r)["auto_resume_at"]
+    script[:] = [OK, DONE]
+    main.reschedule_auto_resumes()
+    await main.auto_resumes[r]
+    await settle(r)
+    assert db.get_run(r)["status"] == "done"
 
 
 async def run_all():
