@@ -58,4 +58,13 @@
 - [x] Always-visible "Ask" on touch; long-press opens the side thread
 - [x] Confirm Source Serif 4 loads (webfont, font-display: swap)
 - [x] Restart server; tunnel serves the page, logged-out requests rejected
+
+## Desktop polish
+- [x] Tab title + favicon badge for Needs you / Working
+- [x] Per-run ⋯ menu in the sidebar (Archive / Stop / Delete)
+- [x] Date dividers, Copy button on code blocks
+- [x] Keyboard: / composer, Esc closes side thread, Alt+↑/↓ runs; Tab walk all visible with focus rings
+- [ ] Look it over in real Chrome (extension reported "No group"; headless used so far)
+
+## Later
 - [ ] Check on the real phone (Ask button, long-press, drawer, live message)

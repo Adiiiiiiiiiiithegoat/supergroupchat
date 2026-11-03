@@ -46,7 +46,9 @@ button follows the run state (Start building / Pause / Resume); Stop, Archive an
 only removes the run from the app, never the workspace). Hover a message (long-press on a phone) and choose
 **Ask about this** for a side thread; nothing is created until you send the first question. Closing it offers
 Discard or Send note to main chat (the note is editable first). On touch screens every message shows a small
-**Ask** button, and long-pressing a message opens its side thread too.
+**Ask** button, and long-pressing a message opens its side thread too. Each sidebar run has its own ⋯ menu
+(Archive / Stop / Delete) on hover. Keyboard: `/` types a message, `Esc` closes the side thread, `Alt+↑/↓` switches
+runs (also listed in the account menu). The tab title and icon show `● Needs you` when the Planner is waiting.
 
 Contrast: every text/background pair in both themes is AA (4.5:1 text, 3:1 UI). Filled buttons use `#BD5938`
 (white text 4.52:1; `#C6613F` only reaches 4.05:1), and `#D97757` is kept for accents (pills with dark text,
