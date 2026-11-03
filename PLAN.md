@@ -43,4 +43,4 @@
 - [x] Tunnel "supergroupchat" + ingress via API, proxied CNAME groupchat
 - [x] cloudflared installed, start-all.bat
 - [x] Verify login page, rejected API/websocket, dashboard untouched
-- [ ] Log in from the phone once (password + TOTP) end to end
+- [x] Real login through the tunnel (password + TOTP) end to end
