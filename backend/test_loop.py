@@ -179,6 +179,29 @@ async def test_restart_reschedules_auto_resume():
     assert db.get_run(r)["status"] == "done"
 
 
+async def test_archive_and_delete_run_keep_workspace():
+    r, t = new_run()
+    await main.post(r, t, "aditya", "hi")
+    ws = db.get_run(r)["workspace"]
+    await main.control(r, "archive")
+    assert db.get_run(r)["archived"] == 1
+    listed = next(x for x in main.list_runs() if x["id"] == r)
+    assert listed["last_activity"] == db.all_("SELECT created_at FROM messages WHERE run_id=?", r)[-1]["created_at"]
+    await main.control(r, "unarchive")
+    assert db.get_run(r)["archived"] == 0
+    db.update_run(r, status="running")
+    try:
+        await main.control(r, "delete")
+        assert False, "deleted a running run"
+    except main.HTTPException as e:
+        assert e.status_code == 409
+    db.update_run(r, status="stopped")
+    await main.control(r, "delete")
+    assert db.get_run(r) is None
+    assert not db.all_("SELECT id FROM threads WHERE run_id=?", r) + db.all_("SELECT id FROM messages WHERE run_id=?", r)
+    assert main.git(ws, "rev-list", "--count", "HEAD")[0] == "1"  # workspace and its history untouched
+
+
 async def run_all():
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

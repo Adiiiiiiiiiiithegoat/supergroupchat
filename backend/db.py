@@ -26,10 +26,12 @@ CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, expires_at REAL NOT NUL
 conn = sqlite3.connect(DB_PATH, check_same_thread=False, isolation_level=None)
 conn.row_factory = sqlite3.Row
 conn.executescript(SCHEMA)
-try:  # dbs created before auto-resume existed
-    conn.execute("ALTER TABLE runs ADD COLUMN auto_resume_at REAL")  # unix seconds
-except sqlite3.OperationalError:
-    pass
+for col in ("auto_resume_at REAL",  # unix seconds; dbs created before auto-resume existed
+            "archived INTEGER NOT NULL DEFAULT 0"):
+    try:
+        conn.execute(f"ALTER TABLE runs ADD COLUMN {col}")
+    except sqlite3.OperationalError:
+        pass
 
 
 def now():

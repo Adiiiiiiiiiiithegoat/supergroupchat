@@ -64,6 +64,7 @@ drivers: dict[int, asyncio.Task] = {}
 procs: dict[int, set] = {}
 busy_threads: set[int] = set()
 auto_resumes: dict[int, asyncio.Task] = {}
+speaking: dict[int, dict] = {}  # thread_id -> {role, since, tool}, so a reloaded page can show who's working
 
 
 async def broadcast(**event):
@@ -99,16 +100,20 @@ async def agent_turn(run_id, thread_id, role, prompt, resume=None, fork=False):
         await broadcast(t="live", run_id=run_id, thread_id=thread_id, role=role, text=text)
 
     async def on_tool(summary):
+        speaking[thread_id]["tool"] = summary
         await broadcast(t="live_tool", run_id=run_id, thread_id=thread_id, role=role, tool=summary)
 
     def on_proc(p):
         procs.setdefault(run_id, set()).add(p)
 
-    await broadcast(t="typing", run_id=run_id, thread_id=thread_id, role=role, on=True)
+    speaking[thread_id] = {"role": role, "since": time.time(), "tool": None}
+    await broadcast(t="typing", run_id=run_id, thread_id=thread_id, role=role, on=True,
+                    since=speaking[thread_id]["since"])
     try:
         return await run_turn(role, prompt, run["workspace"], resume=resume, fork=fork,
                               on_text=on_text, on_tool=on_tool, on_proc=on_proc)
     finally:
+        speaking.pop(thread_id, None)
         procs[run_id] = {p for p in procs.get(run_id, ()) if p.returncode is None}
         await broadcast(t="typing", run_id=run_id, thread_id=thread_id, role=role, on=False)
 
@@ -318,7 +323,8 @@ def config():
 
 @app.get("/api/runs")
 def list_runs():
-    return db.all_("SELECT * FROM runs ORDER BY id DESC")
+    return db.all_("SELECT runs.*, (SELECT max(created_at) FROM messages WHERE run_id=runs.id) AS last_activity "
+                   "FROM runs ORDER BY id DESC")
 
 
 @app.post("/api/runs")
@@ -344,9 +350,11 @@ def create_run(body: NewRun):
 @app.get("/api/runs/{run_id}")
 def get_run(run_id: int):
     run = need_run(run_id)
-    return {"run": run, "threads": db.all_("SELECT * FROM threads WHERE run_id=?", run_id),
+    threads = db.all_("SELECT * FROM threads WHERE run_id=?", run_id)
+    return {"run": run, "threads": threads,
             "messages": db.all_("SELECT * FROM messages WHERE run_id=? ORDER BY id", run_id),
-            "busy": run_id in drivers, "looping": bool(want_loop.get(run_id))}
+            "busy": run_id in drivers, "looping": bool(want_loop.get(run_id)),
+            "speaking": {t["id"]: speaking[t["id"]] for t in threads if t["id"] in speaking}}
 
 
 @app.post("/api/runs/{run_id}/message")
@@ -447,6 +455,18 @@ async def control(run_id: int, action: str):
             task.cancel()
         await post(run_id, main["id"], "system", "Stopped by Aditya.")
         await set_run(run_id, status="stopped")
+    elif action in ("archive", "unarchive"):
+        await set_run(run_id, archived=int(action == "archive"))
+    elif action == "delete":
+        # only the app's record goes; the workspace folder and its git history are never touched
+        threads = [t["id"] for t in db.all_("SELECT id FROM threads WHERE run_id=?", run_id)]
+        if run["status"] == "running" or run_id in drivers or busy_threads & set(threads):
+            raise HTTPException(409, "an agent is still working on this run; stop it first")
+        await cancel_auto_resume(run_id)
+        db.conn.execute("DELETE FROM messages WHERE run_id=?", (run_id,))
+        db.conn.execute("DELETE FROM threads WHERE run_id=?", (run_id,))
+        db.conn.execute("DELETE FROM runs WHERE id=?", (run_id,))
+        await broadcast(t="run_deleted", run_id=run_id)
     else:
         raise HTTPException(404, "unknown action")
     return {"ok": True}
