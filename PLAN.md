@@ -54,4 +54,8 @@
 - [x] Live typing with timer + latest tool, smart auto-scroll, jump to latest
 - [x] Side threads: Ask about this, draft until first send, close with editable note, reopen read-only
 - [x] Screenshots desktop/390px light/dark + headless interaction checks
-- [ ] Check on the real phone (touch long-press, iOS Safari)
+- [x] AA contrast in both themes (darker filled buttons, muted, links, pills, diff colours, field borders)
+- [x] Always-visible "Ask" on touch; long-press opens the side thread
+- [x] Confirm Source Serif 4 loads (webfont, font-display: swap)
+- [x] Restart server; tunnel serves the page, logged-out requests rejected
+- [ ] Check on the real phone (Ask button, long-press, drawer, live message)

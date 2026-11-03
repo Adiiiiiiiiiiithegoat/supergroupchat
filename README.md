@@ -45,7 +45,12 @@ Use: **New run** (pick a folder or a recent one), describe what you want, then *
 button follows the run state (Start building / Pause / Resume); Stop, Archive and Delete are in the ⋯ menu (Delete
 only removes the run from the app, never the workspace). Hover a message (long-press on a phone) and choose
 **Ask about this** for a side thread; nothing is created until you send the first question. Closing it offers
-Discard or Send note to main chat (the note is editable first). Closed side threads reopen read-only from the chip
+Discard or Send note to main chat (the note is editable first). On touch screens every message shows a small
+**Ask** button, and long-pressing a message opens its side thread too.
+
+Contrast: every text/background pair in both themes is AA (4.5:1 text, 3:1 UI). Filled buttons use `#BD5938`
+(white text 4.52:1; `#C6613F` only reaches 4.05:1), and `#D97757` is kept for accents (pills with dark text,
+highlights, borders, dark-theme focus). When changing a colour token, recheck its pairs. Closed side threads reopen read-only from the chip
 under their message. Theme (System/Light/Dark) and Log out are in the account menu.
 
 Self-check for the status/tool parsing: `python -m backend.agents`
