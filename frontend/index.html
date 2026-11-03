@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>supergroupchat</title>
+<link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23D97757'/%3E%3Cpath d='M9 11h14M9 16h10M9 21h7' stroke='%23fff' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
@@ -73,7 +74,11 @@ body.sb-collapsed #sidebar { margin-left: -272px; }
 .sb-new { margin: 0 12px 10px; }
 .sb-scroll { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
 .sb-label { font-size: 12px; color: var(--muted); padding: 10px 8px 4px; }
-.run-item { width: 100%; display: grid; grid-template-columns: 12px 1fr; column-gap: 8px; text-align: left; align-items: center;
+.run-row { position: relative; }
+.run-more { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); opacity: 0; width: 32px; min-height: 32px; }
+.run-row:hover .run-more, .run-row:focus-within .run-more, .run-more:popover-open { opacity: 1; }
+@media (hover: none), (pointer: coarse) { .run-more { opacity: 1; } }
+.run-item { width: 100%; display: grid; grid-template-columns: 12px 1fr; column-gap: 8px; text-align: left; align-items: center; padding-right: 42px !important;
   border: 0; background: transparent; padding: 8px 10px; min-height: 52px; border-radius: 10px; }
 .run-item:hover:not(:disabled) { background: rgb(127 127 127 / .08); }
 .run-item.active { background: var(--raised); box-shadow: var(--shadow); }
@@ -118,6 +123,9 @@ body.sb-collapsed #sidebar { margin-left: -272px; }
 .menu button:hover:not(:disabled) { background: var(--panel); }
 .menu hr { border: 0; border-top: 1px solid var(--border); margin: 6px 4px; }
 .menu .mlabel { font-size: 12px; color: var(--muted); padding: 6px 10px 4px; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 2px 10px 6px; font-size: 13px; }
+.keys dt { font-family: var(--mono); font-size: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 5px; padding: 0 6px; justify-self: start; }
+.keys dd { margin: 0; color: var(--muted); }
 .seg { display: flex; gap: 4px; padding: 2px 4px 6px; }
 .seg button { flex: 1; min-height: 34px; font-size: 13px; padding: 0 6px; justify-content: center; }
 .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); font-weight: 600; }
@@ -138,7 +146,7 @@ body.sb-collapsed #sidebar { margin-left: -272px; }
 .pill.CONTINUE { background: rgb(120 140 93 / .16); color: var(--ok); }
 .pill.DONE { background: rgb(120 140 93 / .22); color: var(--ok); }
 .pill.NEED_ADITYA { background: var(--accent); color: var(--on-pill); }
-.ask { margin-left: auto; min-height: 28px; font-size: 12.5px; padding: 0 10px; border-radius: 99px; opacity: 0; transition: opacity .12s; }
+.ask { margin-left: auto; min-height: 28px; font-size: 12.5px; padding: 0 10px; border-radius: 99px; gap: .3em; opacity: 0; transition: opacity .12s; }
 .card:hover .ask, .card:focus-within .ask, .mine:hover .ask, .mine:focus-within .ask { opacity: 1; }
 /* touch: always show a compact "Ask" (long-press also works, but iOS Safari can't be relied on for it) */
 @media (hover: none), (pointer: coarse) {
@@ -171,7 +179,12 @@ body.sb-collapsed #sidebar { margin-left: -272px; }
 .md ul, .md ol { margin: 0 0 .7em; padding-left: 1.4em; }
 .md li { margin: .15em 0; }
 .md code { font-family: var(--mono); font-size: .84em; background: rgb(127 127 127 / .14); padding: .1em .35em; border-radius: 5px; }
-.md pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; overflow-x: auto; margin: 0 0 .8em; line-height: 1.45; }
+.md .code { position: relative; margin: 0 0 .8em; }
+.md pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; overflow-x: auto; margin: 0; line-height: 1.45; }
+.copy { position: absolute; top: 6px; right: 6px; min-height: 28px; padding: 0 10px; font: 12px var(--sans); border-radius: 8px; opacity: 0; transition: opacity .12s; }
+.code:hover .copy, .copy:focus-visible, .copy.done { opacity: 1; }
+@media (hover: none), (pointer: coarse) { .copy { opacity: 1; } }
+.day-div { text-align: center; font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 6px; }
 .md pre code { background: none; padding: 0; font-size: 13px; overflow-wrap: normal; white-space: pre; }
 .md blockquote { margin: 0 0 .7em; padding-left: 12px; border-left: 3px solid var(--border); color: var(--muted); }
 .md hr { border: 0; border-top: 1px solid var(--border); margin: 1em 0; }
@@ -374,6 +387,9 @@ dialog input { width: 100%; font-family: var(--mono); font-size: 13.5px; }
   <div class="mlabel">Theme</div>
   <div class="seg" id="themeSeg"><button data-theme="system">System</button><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div>
   <hr>
+  <div class="mlabel">Keyboard</div>
+  <dl class="keys"><dt>/</dt><dd>Type a message</dd><dt>Esc</dt><dd>Close side thread</dd><dt>Alt ↑ ↓</dt><dd>Previous / next run</dd></dl>
+  <hr>
   <form method="post" action="/logout"><button>Log out</button></form>
 </div>
 
@@ -477,7 +493,7 @@ function md(src) {
       const buf = [];
       for (i++; i < lines.length && !/^\s*```/.test(lines[i]); i++) buf.push(lines[i]);
       i++;
-      out.push(`<pre><code>${esc(buf.join('\n'))}</code></pre>`);
+      out.push(`<div class="code"><pre><code>${esc(buf.join('\n'))}</code></pre><button type="button" class="copy" aria-label="Copy code">Copy</button></div>`);
     } else if (/^#{1,6}\s/.test(l)) {
       const n = Math.min(6, l.match(/^#+/)[0].length + 2);
       out.push(`<h${n}>${inline(l.replace(/^#+\s*/, ''))}</h${n}>`); i++;
@@ -567,8 +583,8 @@ function chipsEl(mid) {
   return box;
 }
 function askBtn(id) {
-  const b = el('button', 'ask', 'Ask');
-  b.append(el('span', 'more', ' about this'));
+  const b = el('button', 'ask', 'Ask ');  // trailing space: drawn as the flex gap, kept in the text
+  b.append(el('span', 'more', 'about this'));
   b.setAttribute('aria-label', 'Ask about this message in a side thread');
   b.dataset.ask = id;
   return b;
@@ -615,8 +631,15 @@ function timelineFor(tid) {
   if (branch?.thread && tid === branch.thread.id) return $('btimeline');
   return null;
 }
+function dayLabel(d) {
+  const now = new Date(), days = Math.round((new Date(now.toDateString()) - new Date(d.toDateString())) / 864e5);
+  return days === 0 ? 'Today' : days === 1 ? 'Yesterday'
+    : d.toLocaleDateString([], {weekday: 'short', month: 'short', day: 'numeric', ...(d.getFullYear() !== now.getFullYear() && {year: 'numeric'})});
+}
 function appendMsg(t, m) {
   t.querySelector('.empty')?.remove();
+  const d = new Date(m.created_at);
+  if (t.dataset.day !== d.toDateString()) { t.dataset.day = d.toDateString(); t.append(el('div', 'day-div', dayLabel(d))); }
   if (t.id === 'timeline' && m.role === 'executor' && m.meta.round) t.append(el('div', 'round-div', `Round ${m.meta.round}`));
   t.append(renderMsg(m, t.id !== 'timeline'));
 }
@@ -666,7 +689,14 @@ function renderRuns() {
     b.append(el('span', `dot s-${r.status}`), el('span', 'rname', folder(r.workspace)),
              el('span', 'rsub', `${STATUS[r.status]} · ${ago(r.last_activity || r.created_at)}`));
     b.onclick = () => { closeDrawer(); if (r.id !== run?.id) loadRun(r.id); };
-    (r.archived ? arch : list).append(b);
+    const more = el('button', 'run-more ghost icon');
+    more.innerHTML = '<svg><use href="#i-more"/></svg>';
+    more.setAttribute('popovertarget', 'runMenu');
+    more.setAttribute('aria-label', `Actions for ${folder(r.workspace)}`);
+    more.dataset.run = r.id;
+    const row = el('div', 'run-row');
+    row.append(b, more);
+    (r.archived ? arch : list).append(row);
   }
   const nArch = runs.filter(r => r.archived).length;
   $('archived').hidden = !nArch; $('archCount').textContent = nArch;
@@ -695,8 +725,7 @@ function renderHeader() {
   $('autoChip').hidden = !run.auto_resume_at;
   if (run.auto_resume_at) $('autoAt').textContent = new Date(run.auto_resume_at * 1000)
     .toLocaleString([], {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'});
-  $('mStop').disabled = !(s === 'running' || threads.some(t => speaking[t.id]));
-  $('mArchive').textContent = run.archived ? 'Unarchive run' : 'Archive run';
+  $('moreBtn').dataset.run = run.id;
 }
 function needsYou() {
   if (!run || speaking[run.main_thread]) return null;
@@ -710,6 +739,21 @@ function renderWaiting() {
   $('waitBar').hidden = !w;
   if (w) $('waitHint').textContent = run.status === 'discussing' ? 'Reply below, or press Start building when the plan is right.'
     : run.status === 'paused' || run.status === 'stopped' ? 'Reply below, then Resume.' : 'Reply below.';
+  renderTitle();
+}
+// tab title + favicon badge, so a run that needs you shows from another tab
+const icon = badge => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="8" fill="#D97757"/><path d="M9 11h14M9 16h10M9 21h7" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>
+  ${badge ? '<circle cx="25" cy="7" r="6.5" fill="#141413" stroke="#fff" stroke-width="2"/>' : ''}</svg>`);
+let shownTitle;
+function renderTitle() {
+  const needs = !!needsYou(), working = !!run && threads.some(t => speaking[t.id]);
+  const title = !run ? 'supergroupchat'
+    : `${needs ? '● Needs you · ' : working ? 'Working · ' : ''}${folder(run.workspace)} · supergroupchat`;
+  if (title === shownTitle) return;
+  shownTitle = title;
+  document.title = title;
+  $('favicon').href = icon(needs);
 }
 function renderWorking() {
   for (const [bar, tid] of [['working', run?.main_thread], ['bworking', branch?.thread?.id]]) {
@@ -719,6 +763,7 @@ function renderWorking() {
     $(bar).querySelector('.wtext').textContent = `${NAMES[sp.role]} is working… ${elapsed(sp.since)}`;
     $(bar).querySelector('.wtool').textContent = sp.tool ? `· ${sp.tool}` : '';
   }
+  renderTitle();
 }
 function renderComposer() {
   $('composer').hidden = !run;
@@ -738,6 +783,7 @@ function emptyEl(title, text, button) {
 function renderTimeline() {
   const t = $('timeline');
   t.replaceChildren();
+  delete t.dataset.day;
   for (const k in live) delete live[k];
   if (!run) {
     t.append(runs.length ? emptyEl('Pick a run', 'Choose a run from the sidebar, or start a new one.', 'New run')
@@ -813,19 +859,35 @@ $('primary').onclick = async () => {
   try { await api(`/api/runs/${run.id}/${a}`, {}); } catch { pausing = false; renderHeader(); }
 };
 $('cancelAuto').onclick = () => api(`/api/runs/${run.id}/cancel_auto`, {});
+// one run menu, opened from the header (current run) or a sidebar row (that row's run)
+let menuRun = null;
+$('runMenu').addEventListener('beforetoggle', e => {
+  if (e.newState !== 'open') return;
+  const id = +invoker?.dataset.run;
+  menuRun = run?.id === id ? run : runs.find(r => r.id === id);
+  if (!menuRun) return e.preventDefault();
+  const working = menuRun.id === run?.id && threads.some(t => speaking[t.id]);
+  $('mStop').disabled = !(menuRun.status === 'running' || working);
+  $('mArchive').textContent = menuRun.archived ? 'Unarchive run' : 'Archive run';
+});
 $('mStop').onclick = async () => {
+  const r = menuRun || run;
   $('runMenu').hidePopover();
-  if (await confirmBox('Stop the run now?', 'The agent that is working gets killed mid-step. Anything it changed so far stays in the workspace. You can Resume afterwards.', 'Stop now'))
-    api(`/api/runs/${run.id}/stop`, {});
+  if (await confirmBox(`Stop “${folder(r.workspace)}” now?`, 'The agent that is working gets killed mid-step. Anything it changed so far stays in the workspace. You can Resume afterwards.', 'Stop now'))
+    api(`/api/runs/${r.id}/stop`, {});
 };
-$('mArchive').onclick = () => { $('runMenu').hidePopover(); api(`/api/runs/${run.id}/${run.archived ? 'unarchive' : 'archive'}`, {}); };
-$('mDelete').onclick = async () => {
+$('mArchive').onclick = () => {
+  const r = menuRun || run;
   $('runMenu').hidePopover();
-  const id = run.id;
-  if (!await confirmBox(`Delete “${folder(run.workspace)}”?`, `This removes the run and its chat from supergroupchat. The folder ${run.workspace} and its git history are not touched.`, 'Delete run')) return;
-  await api(`/api/runs/${id}/delete`, {});
-  runs = runs.filter(r => r.id !== id);
-  if (run?.id === id) { store.set('run', ''); await pickRun(); } else renderRuns();
+  api(`/api/runs/${r.id}/${r.archived ? 'unarchive' : 'archive'}`, {});
+};
+$('mDelete').onclick = async () => {
+  const r = menuRun || run;
+  $('runMenu').hidePopover();
+  if (!await confirmBox(`Delete “${folder(r.workspace)}”?`, `This removes the run and its chat from supergroupchat. The folder ${r.workspace} and its git history are not touched.`, 'Delete run')) return;
+  await api(`/api/runs/${r.id}/delete`, {});
+  runs = runs.filter(x => x.id !== r.id);
+  if (run?.id === r.id) { store.set('run', ''); await pickRun(); } else renderRuns();
 };
 
 // popover menus: place under whichever button opened them
@@ -899,6 +961,7 @@ function openPanel(thread, parent) {
   q.append(body);
   const t = $('btimeline');
   t.replaceChildren();
+  delete t.dataset.day;
   if (thread) for (const m of msgs) if (m.thread_id === thread.id) appendMsg(t, m);
   if (thread && speaking[thread.id]) liveCard(thread.id);
   $('closeBox').hidden = true;
@@ -1035,6 +1098,34 @@ function connect() {
     }, 1500);
   };
 }
+// copy buttons on code blocks (clipboard needs https or localhost)
+document.addEventListener('click', async e => {
+  const b = e.target.closest('.copy');
+  if (!b) return;
+  try { await navigator.clipboard.writeText(b.previousElementSibling.innerText); }
+  catch { return toast('Couldn’t copy: the browser blocked clipboard access.'); }
+  b.textContent = 'Copied'; b.classList.add('done');
+  setTimeout(() => { b.textContent = 'Copy'; b.classList.remove('done'); }, 1500);
+});
+
+// keyboard: Esc closes the side thread / drawer, / focuses the composer, Alt+↑/↓ switches runs
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (document.querySelector('dialog[open], :popover-open')) return;  // the browser closes those itself
+    if (branch && !$('closeBox').hidden) { $('closeCancel').click(); $('binput').focus(); }
+    else if (branch) { closePanel(); $('input').focus(); }
+    else closeDrawer();
+  } else if (e.key === '/' && !e.target.closest('input, textarea') && !e.ctrlKey && !e.metaKey && !e.altKey && run) {
+    e.preventDefault();
+    $('input').focus();
+  } else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    const list = sortedRuns().filter(r => !r.archived || r.id === run?.id);
+    const next = list[list.findIndex(r => r.id === run?.id) + (e.key === 'ArrowDown' ? 1 : -1)];
+    e.preventDefault();
+    if (next) loadRun(next.id).then(() => $('runList').querySelector('.active')?.scrollIntoView({block: 'nearest'}));
+  }
+});
+
 setInterval(renderWorking, 1000);
 setInterval(renderRuns, 60000);
 
