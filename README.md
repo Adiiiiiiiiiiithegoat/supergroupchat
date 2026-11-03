@@ -41,8 +41,12 @@ Always-on instead (from an admin terminal; not installed by default):
 That runs only the tunnel as a Windows service; the server itself still needs `run.bat` (or a scheduled task).
 `cloudflared service uninstall` removes it.
 
-Use: type a workspace folder, **New run**, chat with the Planner, **Start loop**. Click any message to open a side thread.
-"Close & send note" sends whatever is in the side-thread box as a one-line note into the main thread.
+Use: **New run** (pick a folder or a recent one), describe what you want, then **Start building**. The one header
+button follows the run state (Start building / Pause / Resume); Stop, Archive and Delete are in the ⋯ menu (Delete
+only removes the run from the app, never the workspace). Hover a message (long-press on a phone) and choose
+**Ask about this** for a side thread; nothing is created until you send the first question. Closing it offers
+Discard or Send note to main chat (the note is editable first). Closed side threads reopen read-only from the chip
+under their message. Theme (System/Light/Dark) and Log out are in the account menu.
 
 Self-check for the status/tool parsing: `python -m backend.agents`
 

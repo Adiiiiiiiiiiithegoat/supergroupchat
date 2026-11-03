@@ -44,3 +44,14 @@
 - [x] cloudflared installed, start-all.bat
 - [x] Verify login page, rejected API/websocket, dashboard untouched
 - [x] Real login through the tunnel (password + TOTP) end to end
+
+## UI redesign
+- [x] Backend: archive/delete runs, last activity, speaking state (+ test)
+- [x] Prompts: no DONE without verification; Executor stops reporting commit status
+- [x] Warm palette, light/dark + toggle, serif agent text, sidebar/drawer
+- [x] Header: phase stepper, round, one primary action, ⋯ and account menus
+- [x] Messages: cards/bubbles, status pills, markdown, tools/diff summaries, round dividers, needs-you bar
+- [x] Live typing with timer + latest tool, smart auto-scroll, jump to latest
+- [x] Side threads: Ask about this, draft until first send, close with editable note, reopen read-only
+- [x] Screenshots desktop/390px light/dark + headless interaction checks
+- [ ] Check on the real phone (touch long-press, iOS Safari)
